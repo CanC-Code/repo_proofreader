@@ -8,10 +8,7 @@ client = OpenAI(
 )
 
 def query_reasoning_engine(diff_data, context_map, error_logs):
-    """
-    Constructs the prompt and interacts with the reasoning engine.
-    """
-    with open('templates/error_reasoning.txt', 'r') as f:
+    with open('.proofreader-engine/templates/error_reasoning.txt', 'r') as f:
         system_prompt = f.read()
 
     user_content = (
