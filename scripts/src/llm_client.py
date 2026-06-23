@@ -2,8 +2,13 @@ import os
 import json
 from openai import OpenAI
 
+# Retrieve the key, and explicitly enforce the fallback if it returns an empty string
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    api_key = "ollama"
+
 client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY", "ollama"), 
+    api_key=api_key, 
     base_url=os.getenv("LLM_ENDPOINT", "https://api.openai.com/v1")
 )
 
