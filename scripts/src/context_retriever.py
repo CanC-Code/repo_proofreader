@@ -33,7 +33,6 @@ def extract_symbols(file_path):
         'class_declaration'
     ]
 
-    # Perform a top-level scan for key structural blocks
     for child in root_node.children:
         if child.type in target_node_types:
             extracted_snippets.append(code[child.start_byte:child.end_byte])
