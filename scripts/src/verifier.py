@@ -3,9 +3,6 @@ import os
 import shlex
 
 def run_local_verification(repo_path, patch_plan):
-    """
-    Applies the patch plan, runs the build command, and returns (is_success, logs).
-    """
     os.chdir(repo_path)
     
     try:
@@ -18,7 +15,6 @@ def run_local_verification(repo_path, patch_plan):
         print("[ERROR] Patch could not be applied cleanly.")
         return False, "Patch failed to apply to the current Git tree."
 
-    # Use environment variable for build command, fallback to make
     build_cmd_str = os.environ.get("BUILD_COMMAND", "make all")
     build_cmd = shlex.split(build_cmd_str)
 
