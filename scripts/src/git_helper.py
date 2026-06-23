@@ -10,7 +10,7 @@ def get_latest_diff(repo_path):
         
         files_cmd = ["git", "diff", "--name-only", "HEAD~1", "HEAD"]
         files_output = subprocess.check_output(files_cmd, text=True).splitlines()
-        
+    
         logs_cmd = ["git", "log", "-n", "5", "--oneline"]
         logs_output = subprocess.check_output(logs_cmd, text=True)
         
@@ -24,7 +24,11 @@ def get_latest_diff(repo_path):
         return None
 
 def get_build_logs(log_file_path):
+    print(f"[DEBUG] Attempting to read log at: {log_file_path}")
     if os.path.exists(log_file_path):
         with open(log_file_path, 'r') as f:
-            return f.read()
+            content = f.read()
+            print(f"[DEBUG] Log file found. Size: {len(content)} bytes")
+            return content
+    print("[ERROR] Build log file not found!")
     return "No build logs found."
