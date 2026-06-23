@@ -15,10 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # 1. Checkout the project repository (the code being analyzed)
+      # fetch-depth: 2 is required to allow git diff HEAD~1 HEAD to succeed
       - name: 📥 Checkout Target Repository
         uses: actions/checkout@v4
         with:
           path: .
+          fetch-depth: 2  
 
       # 2. Checkout the proofreader engine repository (the scripts/logic)
       - name: 🧠 Checkout Proofreader Engine
