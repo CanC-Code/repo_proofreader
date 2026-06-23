@@ -1,0 +1,24 @@
+name: Prepare AI Model
+on:
+  workflow_call:
+
+jobs:
+  cache-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Model from Cache
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: models/qwen-coder.gguf
+          key: ${{ runner.os }}-model-${{ hashFiles('models/manifest.json') }}
+
+      - name: Download Model if Missing
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p models
+          curl -L $(jq -r .download_url models/manifest.json) -o models/qwen-coder.gguf
+          # Verify integrity
+          echo "$(jq -r .sha256 models/manifest.json)  models/qwen-coder.gguf" | sha256sum -c -
