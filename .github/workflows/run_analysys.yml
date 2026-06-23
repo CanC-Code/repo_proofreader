@@ -1,0 +1,69 @@
+# .github/workflows/run-analysis.yml
+name: Proofreader Analysis
+on:
+  workflow_call:
+    inputs:
+      target_branch:
+        required: true
+        type: string
+    secrets:
+      OPENAI_API_KEY:
+        required: false # No longer strictly required if running locally
+
+jobs:
+  analyze-and-repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Target Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Proofreader Logic
+        uses: actions/checkout@v4
+        with:
+          repository: CanC-Code/repo_proofreader
+          path: .proofreader-engine
+
+      - name: Restore Model from Cache
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: .proofreader-engine/models/qwen-coder.gguf
+          key: ${{ runner.os }}-model-${{ hashFiles('.proofreader-engine/models/manifest.json') }}
+
+      - name: Download Model if Missing
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .proofreader-engine/models
+          curl -L $(jq -r .download_url .proofreader-engine/models/manifest.json) -o .proofreader-engine/models/qwen-coder.gguf
+          echo "$(jq -r .sha256 .proofreader-engine/models/manifest.json)  .proofreader-engine/models/qwen-coder.gguf" | sha256sum -c -
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies & Llama.cpp Server
+        run: |
+          pip install -r .proofreader-engine/scripts/requirements.txt
+          # Install pre-built CPU wheel to avoid a 10-minute C++ compilation step on the runner
+          pip install llama-cpp-python[server] --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+      - name: Start Local LLM Inference Server
+        run: |
+          # Start the OpenAI-compatible server in the background
+          python -m llama_cpp.server --model .proofreader-engine/models/qwen-coder.gguf --host 127.0.0.1 --port 8000 &
+          
+          # Poll the server until it is ready to accept requests
+          echo "[INFO] Waiting for LLM server to boot..."
+          timeout 60 bash -c 'until curl -s http://127.0.0.1:8000/v1/models; do sleep 2; done'
+          echo "[INFO] LLM Server is online."
+
+      - name: Run Diagnostic Agent
+        env:
+          LLM_ENDPOINT: "http://127.0.0.1:8000/v1"
+          OPENAI_API_KEY: "local-bypass" # llama-cpp-python doesn't require a real key
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python .proofreader-engine/scripts/main.py --repo_path=$GITHUB_WORKSPACE
