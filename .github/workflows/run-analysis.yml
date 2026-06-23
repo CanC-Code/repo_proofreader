@@ -38,5 +38,8 @@ jobs:
 
       # 5. Execute your diagnostic script
       - name: 🚀 Run Diagnostic Agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          python3 .proofreader-engine/scripts/diagnostic_agent.py --branch ${{ inputs.target_branch }}
+          # Execute the main orchestrator script and point it to the checked-out target repo
+          python3 .proofreader-engine/scripts/main.py --repo_path .
