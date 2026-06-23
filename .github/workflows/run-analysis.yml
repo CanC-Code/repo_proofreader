@@ -6,6 +6,9 @@ on:
       target_branch:
         required: true
         type: string
+    secrets:
+      OPENAI_API_KEY:
+        required: false # Set to true if you eventually require the external API
 
 jobs:
   run-diagnostic:
