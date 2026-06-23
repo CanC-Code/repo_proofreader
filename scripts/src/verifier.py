@@ -1,35 +1,33 @@
 import subprocess
 import os
+import shlex
 
 def run_local_verification(repo_path, patch_plan):
     """
-    Applies the patch plan to the local repository and runs the build command.
+    Applies the patch plan, runs the build command, and returns (is_success, logs).
     """
     os.chdir(repo_path)
     
-    # 1. Apply the patch
-    # We use 'git apply' to modify the files in the current workspace
     try:
         with open("proposed_fix.patch", "w") as f:
             f.write(patch_plan['suggested_fix'])
             
-        # Check if the patch can be applied cleanly
         subprocess.check_call(["git", "apply", "--check", "proposed_fix.patch"])
         subprocess.check_call(["git", "apply", "proposed_fix.patch"])
-    except subprocess.CalledProcessError:
-        print("[ERROR] Patch could not be applied.")
-        return False
+    except subprocess.CalledProcessError as e:
+        print("[ERROR] Patch could not be applied cleanly.")
+        return False, "Patch failed to apply to the current Git tree."
 
-    # 2. Run the build command
-    # This assumes your project uses a standard build (e.g., make, mvn, gradle)
+    # Use environment variable for build command, fallback to make
+    build_cmd_str = os.environ.get("BUILD_COMMAND", "make all")
+    build_cmd = shlex.split(build_cmd_str)
+
     try:
-        print("[INFO] Building with patch...")
-        # Replace 'make' with your actual project build command
-        subprocess.check_call(["make", "all"]) 
+        print(f"[INFO] Building with command: {build_cmd_str}")
+        output = subprocess.check_output(build_cmd, stderr=subprocess.STDOUT, text=True)
         print("[SUCCESS] Build passed verification.")
-        return True
-    except subprocess.CalledProcessError:
-        print("[FAILURE] Build failed with patch.")
-        # Revert changes if verification fails
+        return True, output
+    except subprocess.CalledProcessError as e:
+        print("[FAILURE] Build failed with proposed patch.")
         subprocess.call(["git", "checkout", "."])
-        return False
+        return False, e.output
