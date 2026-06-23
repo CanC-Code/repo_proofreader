@@ -1,0 +1,5 @@
+{
+  "model_name": "qwen2.5-coder-3b-instruct",
+  "download_url": "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf",
+  "sha256": "YOUR_MODEL_FILE_SHA256_HASH_HERE"
+}
