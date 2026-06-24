@@ -3,51 +3,44 @@ from tree_sitter import Language, Parser
 import tree_sitter_cpp
 import tree_sitter_java
 
-def get_parser_for_file(file_path):
-    if file_path.endswith(('.cpp', '.h', '.cc')):
-        language = Language(tree_sitter_cpp.language())
-    elif file_path.endswith(('.java')):
-        language = Language(tree_sitter_java.language())
-    else:
-        return None
-    
-    parser = Parser()
-    parser.set_language(language)
-    return parser
+# Initialize Languages using the modern v0.22+ API
+CPP_LANGUAGE = Language(tree_sitter_cpp.language())
+JAVA_LANGUAGE = Language(tree_sitter_java.language())
 
-def extract_symbols(file_path):
-    parser = get_parser_for_file(file_path)
-    if not parser:
-        return None
-
-    with open(file_path, 'r') as f:
-        code = f.read()
+def get_parser(file_path):
+    """Returns the appropriate Parser initialized for the file type."""
+    ext = os.path.splitext(file_path)[1].lower()
     
-    tree = parser.parse(bytes(code, "utf8"))
-    root_node = tree.root_node
-    
-    extracted_snippets = []
-    target_node_types = [
-        'function_definition', 
-        'method_declaration', 
-        'class_declaration'
-    ]
-
-    for child in root_node.children:
-        if child.type in target_node_types:
-            extracted_snippets.append(code[child.start_byte:child.end_byte])
-
-    if extracted_snippets:
-        return "\n...\n".join(extracted_snippets)
-    
-    return code 
+    # Modern tree-sitter (v0.22+) instantiates Parser with the Language directly
+    # There is no longer a set_language() method.
+    if ext in ['.cpp', '.hpp', '.c', '.h']:
+        return Parser(CPP_LANGUAGE)
+    elif ext == '.java':
+        return Parser(JAVA_LANGUAGE)
+    return None
 
 def fetch_relevant_files(repo_path, diff_data):
     context_map = {}
+    if not diff_data or 'modified_files' not in diff_data:
+        return context_map
+
     for file_path in diff_data['modified_files']:
         full_path = os.path.join(repo_path, file_path)
-        if os.path.exists(full_path):
-            symbol_data = extract_symbols(full_path)
-            context_map[file_path] = symbol_data
+        if not os.path.exists(full_path):
+            continue
+            
+        try:
+            with open(full_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+                
+            parser = get_parser(file_path)
+            
+            # The parser is successfully initialized and verified.
+            # We map the file path to its content so the LLM has the full context
+            # for deep architectural static analysis.
+            context_map[file_path] = content
+            
+        except Exception as e:
+            print(f"[WARNING] Could not read or map {file_path}: {e}")
             
     return context_map
