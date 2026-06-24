@@ -1,4 +1,4 @@
 openai
-tree-sitter
-tree-sitter-cpp
-tree-sitter-java
+tree-sitter==0.21.3
+tree-sitter-cpp==0.21.0
+tree-sitter-java==0.21.0
