@@ -5,9 +5,13 @@ def get_latest_diff(repo_path):
     try:
         os.chdir(repo_path)
         
-        # Expand vision to the last 15 commits to capture the JNI and OTR generation logic
         diff_cmd = ["git", "diff", "HEAD~15", "HEAD"]
         diff_output = subprocess.check_output(diff_cmd, text=True, errors='replace')
+        
+        # --- FIX: Hard cap the diff payload to ~5,000 tokens ---
+        MAX_DIFF_CHARS = 20000
+        if len(diff_output) > MAX_DIFF_CHARS:
+            diff_output = diff_output[:MAX_DIFF_CHARS] + "\n...[DIFF TRUNCATED DUE TO SIZE]..."
         
         files_cmd = ["git", "diff", "--name-only", "HEAD~15", "HEAD"]
         files_output = subprocess.check_output(files_cmd, text=True, errors='replace').splitlines()
