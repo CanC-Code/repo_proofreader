@@ -3,7 +3,7 @@ import sys
 import argparse
 import json
 import subprocess
-from src.git_helper import get_latest_diff, get_build_logs
+from src.git_helper import get_latest_diff
 from src.context_retriever import fetch_relevant_files
 from src.llm_client import query_reasoning_engine
 
@@ -14,10 +14,8 @@ def clean_markdown_code(raw_text):
     
     lines = raw_text.strip().splitlines()
     
-    # If it starts with a markdown codeblock, remove the first line
     if lines and lines[0].startswith("```"):
         lines = lines[1:]
-        # If it ends with a markdown codeblock, remove the last line
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
             
@@ -32,7 +30,6 @@ def apply_patch_or_replace(repo_path, file_path, new_code):
         print("[ERROR] LLM provided empty code block.")
         return False
 
-    # Strategy 1: Git Apply (if the LLM actually output a unified diff format)
     if cleaned_code.startswith("--- ") or cleaned_code.startswith("diff --git"):
         print("[INFO] Detected Unified Diff format. Attempting git apply...")
         patch_file = os.path.join(repo_path, "proposed_fix.patch")
@@ -57,7 +54,6 @@ def apply_patch_or_replace(repo_path, file_path, new_code):
         finally:
             os.chdir(cwd)
 
-    # Strategy 2: Direct Overwrite (if the LLM output a full code replacement block)
     else:
         print(f"[INFO] Detected full code replacement block. Overwriting {file_path}...")
         if not os.path.exists(full_path):
@@ -77,16 +73,23 @@ def main():
     parser.add_argument("--repo_path", required=True)
     args = parser.parse_args()
 
-    print(f"--- [INFO] Initializing Proofreader on {args.repo_path} ---")
+    print(f"--- [INFO] Initializing Static Analysis Proofreader on {args.repo_path} ---")
     
     diff_data = get_latest_diff(args.repo_path)
     if not diff_data:
         print("[ERROR] Could not get diff data. Exiting.")
         sys.exit(1)
         
-    # The agent looks for the compiler output here to diagnose the actual problem
-    log_path = os.path.join(args.repo_path, "build.log")
-    error_logs = get_build_logs(log_path)
+    # Inject the specific context of the logical failure
+    runtime_issue_description = (
+        "The APK compiles successfully without errors. However, at runtime, the application "
+        "fails to launch and halts completely before the initial N64 logo and intro sequence are rendered. "
+        "There are no ADB logs available. The project architecture was recently modified to generate the "
+        "OTR (Open-To-Right) assets dynamically at runtime on the Android device, completely removing "
+        "the dependency on loading a pre-built ROM file. Investigate the codebase for logic locks, "
+        "JNI initialization sequence mismatches, Android thread-blocking (ANR) during the OTR "
+        "generation phase, or native setup failures."
+    )
     
     print("[INFO] Building contextual code map...")
     try:
@@ -97,15 +100,22 @@ def main():
 
     max_retries = 3
     for attempt in range(1, max_retries + 1):
-        print(f"\n--- [INFO] Reasoning Attempt {attempt}/{max_retries} ---")
-        print("[DEBUG] Dispatching payload to LLM endpoint...")
+        print(f"\n--- [INFO] Static Analysis Attempt {attempt}/{max_retries} ---")
         
         try:
-            analysis_result = query_reasoning_engine(diff_data, context_map, error_logs)
+            analysis_result = query_reasoning_engine(diff_data, context_map, runtime_issue_description)
         except Exception as e:
             print(f"[ERROR] LLM Query Failed: {e}")
             continue
         
+        # Output the LLM's chain of thought to the GitHub Actions Console for your review
+        print("\n--- [DIAGNOSIS] ---")
+        print(f"Root Cause Analysis:\n{analysis_result.get('root_cause_analysis', 'N/A')}")
+        print("Reasoning Steps:")
+        for step in analysis_result.get('reasoning_steps', []):
+            print(f"  - {step}")
+        print("-------------------\n")
+
         patch_plan = analysis_result.get('patch_plan', {})
         file_path = patch_plan.get('file_path')
         suggested_fix = patch_plan.get('suggested_fix')
@@ -119,13 +129,12 @@ def main():
         success = apply_patch_or_replace(args.repo_path, file_path, suggested_fix)
         
         if success:
-            print("[SUCCESS] Patch applied successfully.")
-            # Exit 0 cleanly tells GitHub Actions the agent succeeded!
+            print("[SUCCESS] Logical patch applied successfully.")
             sys.exit(0)
         else:
             print("[FAILURE] Patch failed verification.")
             
-    print(" Max retries reached. Unable to resolve the build failure.")
+    print(" Max retries reached. Unable to resolve the logic failure.")
     sys.exit(1)
 
 if __name__ == "__main__":
