@@ -8,11 +8,7 @@ CPP_LANGUAGE = Language(tree_sitter_cpp.language())
 JAVA_LANGUAGE = Language(tree_sitter_java.language())
 
 def get_parser(file_path):
-    """Returns the appropriate Parser initialized for the file type."""
     ext = os.path.splitext(file_path)[1].lower()
-    
-    # Modern tree-sitter (v0.22+) instantiates Parser with the Language directly
-    # There is no longer a set_language() method.
     if ext in ['.cpp', '.hpp', '.c', '.h']:
         return Parser(CPP_LANGUAGE)
     elif ext == '.java':
@@ -24,7 +20,18 @@ def fetch_relevant_files(repo_path, diff_data):
     if not diff_data or 'modified_files' not in diff_data:
         return context_map
 
+    # --- FIX: Strictly allow only logic files. Ignore XML, YAML, and Assets ---
+    allowed_extensions = {'.cpp', '.hpp', '.c', '.h', '.java'}
+    
+    total_chars_appended = 0
+    # ~8,750 tokens maximum for the file contents array
+    MAX_TOTAL_CHARS = 35000 
+
     for file_path in diff_data['modified_files']:
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext not in allowed_extensions:
+            continue
+
         full_path = os.path.join(repo_path, file_path)
         if not os.path.exists(full_path):
             continue
@@ -33,12 +40,20 @@ def fetch_relevant_files(repo_path, diff_data):
             with open(full_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
                 
+            # Truncate exceptionally long individual files
+            MAX_FILE_CHARS = 10000
+            if len(content) > MAX_FILE_CHARS:
+                content = content[:MAX_FILE_CHARS] + "\n...[FILE TRUNCATED DUE TO SIZE]..."
+                
+            # Stop adding files if we are about to overflow the context window
+            if total_chars_appended + len(content) > MAX_TOTAL_CHARS:
+                print(f"[DEBUG] Reached context map size limit. Skipping remaining files.")
+                break
+
             parser = get_parser(file_path)
-            
-            # The parser is successfully initialized and verified.
-            # We map the file path to its content so the LLM has the full context
-            # for deep architectural static analysis.
-            context_map[file_path] = content
+            if parser:
+                context_map[file_path] = content
+                total_chars_appended += len(content)
             
         except Exception as e:
             print(f"[WARNING] Could not read or map {file_path}: {e}")
