@@ -7,9 +7,15 @@ from src.context_retriever import fetch_relevant_files
 from src.llm_client import query_reasoning_engine
 
 def clean_markdown_code(raw_text):
-    """Strips markdown code blocks from LLM output."""
+    """Strips markdown code blocks from LLM output and enforces string typing."""
     if not raw_text:
         return ""
+    
+    # --- FIX: Type safety check. If the LLM returned a JSON object/dict instead of a string, format it safely. ---
+    if isinstance(raw_text, (dict, list)):
+        raw_text = json.dumps(raw_text, indent=2)
+    elif not isinstance(raw_text, str):
+        raw_text = str(raw_text)
     
     lines = raw_text.strip().splitlines()
     
@@ -75,6 +81,7 @@ def main():
             print("[FAILURE] LLM did not provide a valid patch plan.")
             continue
 
+        # Safely clean and print the code, handling both strings and dicts
         cleaned_code = clean_markdown_code(suggested_fix)
         
         print(f"\n[SUCCESS] AI proposed a logical fix for: {file_path}")
