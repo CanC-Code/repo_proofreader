@@ -12,14 +12,14 @@ client = OpenAI(
     base_url=os.getenv("LLM_ENDPOINT", "https://api.openai.com/v1")
 )
 
-def query_reasoning_engine(diff_data, context_map, error_logs):
+def query_reasoning_engine(diff_data, context_map, issue_description):
     with open('.proofreader-engine/templates/error_reasoning.txt', 'r') as f:
         system_prompt = f.read()
 
     user_content = (
         f"DIFF:\n{diff_data['diff']}\n\n"
         f"CONTEXT MAP:\n{json.dumps(context_map)}\n\n"
-        f"COMPILER ERROR LOGS:\n{error_logs}"
+        f"ISSUE DESCRIPTION:\n{issue_description}"
     )
 
     messages = [
@@ -28,7 +28,7 @@ def query_reasoning_engine(diff_data, context_map, error_logs):
     ]
 
     try:
-        print("[DEBUG] Dispatching payload to LLM endpoint...")
+        print("[DEBUG] Dispatching static analysis payload to LLM endpoint...")
         response = client.chat.completions.create(
             model="qwen2.5-coder-3b-instruct",
             messages=messages,
