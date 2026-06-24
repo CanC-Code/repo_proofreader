@@ -2,7 +2,6 @@ import os
 import sys
 import argparse
 import json
-import subprocess
 from src.git_helper import get_latest_diff
 from src.context_retriever import fetch_relevant_files
 from src.llm_client import query_reasoning_engine
@@ -20,53 +19,6 @@ def clean_markdown_code(raw_text):
             lines = lines[:-1]
             
     return "\n".join(lines).strip() + "\n"
-
-def apply_patch_or_replace(repo_path, file_path, new_code):
-    """Dynamically applies a unified diff or a full code replacement."""
-    full_path = os.path.join(repo_path, file_path)
-    cleaned_code = clean_markdown_code(new_code)
-    
-    if not cleaned_code.strip():
-        print("[ERROR] LLM provided empty code block.")
-        return False
-
-    if cleaned_code.startswith("--- ") or cleaned_code.startswith("diff --git"):
-        print("[INFO] Detected Unified Diff format. Attempting git apply...")
-        patch_file = os.path.join(repo_path, "proposed_fix.patch")
-        
-        with open(patch_file, 'w', encoding='utf-8') as f:
-            f.write(cleaned_code)
-            
-        cwd = os.getcwd()
-        try:
-            os.chdir(repo_path)
-            result = subprocess.run(
-                ["git", "apply", "proposed_fix.patch"], 
-                capture_output=True, 
-                text=True
-            )
-            if result.returncode == 0:
-                print(f"[SUCCESS] git apply succeeded on {file_path}")
-                return True
-            else:
-                print(f"[ERROR] git apply failed:\n{result.stderr}")
-                return False
-        finally:
-            os.chdir(cwd)
-
-    else:
-        print(f"[INFO] Detected full code replacement block. Overwriting {file_path}...")
-        if not os.path.exists(full_path):
-             print(f"[ERROR] Target file does not exist: {full_path}")
-             return False
-        try:
-            with open(full_path, 'w', encoding='utf-8') as f:
-                f.write(cleaned_code)
-            print(f"[SUCCESS] Wrote updated code to {file_path}")
-            return True
-        except Exception as e:
-            print(f"[ERROR] Failed to write to {file_path}: {e}")
-            return False
 
 def main():
     parser = argparse.ArgumentParser()
@@ -108,7 +60,7 @@ def main():
             print(f"[ERROR] LLM Query Failed: {e}")
             continue
         
-        # Output the LLM's chain of thought to the GitHub Actions Console for your review
+        # Output the LLM's chain of thought to the GitHub Actions Console
         print("\n--- [DIAGNOSIS] ---")
         print(f"Root Cause Analysis:\n{analysis_result.get('root_cause_analysis', 'N/A')}")
         print("Reasoning Steps:")
@@ -124,15 +76,20 @@ def main():
             print("[FAILURE] LLM did not provide a valid patch plan.")
             continue
 
-        print(f"[INFO] Running local verification of proposed patch for {file_path}...")
+        # Clean the markdown code and print it directly to the console
+        cleaned_code = clean_markdown_code(suggested_fix)
         
-        success = apply_patch_or_replace(args.repo_path, file_path, suggested_fix)
+        print(f"\n[SUCCESS] AI proposed a logical fix for: {file_path}")
+        print("======================================================================")
+        print(f"vvv FULL REPLACEMENT FILE FOR: {file_path} vvv")
+        print("======================================================================")
+        print(cleaned_code)
+        print("======================================================================")
+        print(f"^^^ END OF FILE: {file_path} ^^^")
+        print("======================================================================\n")
         
-        if success:
-            print("[SUCCESS] Logical patch applied successfully.")
-            sys.exit(0)
-        else:
-            print("[FAILURE] Patch failed verification.")
+        print("[INFO] Analysis complete. Review the output above and copy the file contents to apply the changes locally.")
+        sys.exit(0)
             
     print(" Max retries reached. Unable to resolve the logic failure.")
     sys.exit(1)
