@@ -8,56 +8,43 @@ on:
         type: string
     secrets:
       OPENAI_API_KEY:
-        required: false # Set to true if you eventually require the external API
+        required: false
 
 jobs:
   run-diagnostic:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout the project repository (the code being analyzed)
-      # fetch-depth: 2 is required to allow git diff HEAD~1 HEAD to succeed
       - name: 📥 Checkout Target Repository
         uses: actions/checkout@v4
         with:
           path: .
-          fetch-depth: 2  
+          fetch-depth: 0  # Fetches complete history so the agent can see past the YAML commit
 
-      # 2. Checkout the proofreader engine repository (the scripts/logic)
       - name: 🧠 Checkout Proofreader Engine
         uses: actions/checkout@v4
         with:
           repository: CanC-Code/repo_proofreader
           path: .proofreader-engine
 
-      # 3. Setup Python environment
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # 4. Install dependencies using the now-accessible requirements file
       - name: 📦 Install Requirements
         run: |
           pip install -r .proofreader-engine/scripts/requirements.txt
           pip install llama-cpp-python[server] --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
-      # 5. Download model and start local LLM server
       - name: 🤖 Initialize Local LLM Server
         run: |
-          # Fetch the Qwen 2.5 Coder 3B GGUF weights
           wget -q https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf -O model.gguf
-          
-          # Boot the llama.cpp server in the background
           python3 -m llama_cpp.server --model model.gguf --port 8000 --host 0.0.0.0 &
-          
-          # Allow the server time to fully load the model into memory and bind to the port
           sleep 15
 
-      # 6. Execute the diagnostic script
       - name: 🚀 Run Diagnostic Agent
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          LLM_ENDPOINT: "http://localhost:8000/v1"  # Routes the OpenAI client to the local server
+          LLM_ENDPOINT: "http://localhost:8000/v1"
         run: |
-          # Execute the main orchestrator script and point it to the checked-out target repo
           python3 .proofreader-engine/scripts/main.py --repo_path .
