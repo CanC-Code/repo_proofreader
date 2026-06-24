@@ -20,12 +20,12 @@ def fetch_relevant_files(repo_path, diff_data):
     if not diff_data or 'modified_files' not in diff_data:
         return context_map
 
-    # --- FIX: Strictly allow only logic files. Ignore XML, YAML, and Assets ---
+    # Strictly allow only logic files. Ignore XML, YAML, and Assets.
     allowed_extensions = {'.cpp', '.hpp', '.c', '.h', '.java'}
     
     total_chars_appended = 0
-    # ~8,750 tokens maximum for the file contents array
-    MAX_TOTAL_CHARS = 35000 
+    # --- FIX: Strict total cap for context files (~6,000 tokens) ---
+    MAX_TOTAL_CHARS = 18000 
 
     for file_path in diff_data['modified_files']:
         ext = os.path.splitext(file_path)[1].lower()
@@ -41,7 +41,7 @@ def fetch_relevant_files(repo_path, diff_data):
                 content = f.read()
                 
             # Truncate exceptionally long individual files
-            MAX_FILE_CHARS = 10000
+            MAX_FILE_CHARS = 6000
             if len(content) > MAX_FILE_CHARS:
                 content = content[:MAX_FILE_CHARS] + "\n...[FILE TRUNCATED DUE TO SIZE]..."
                 
