@@ -14,9 +14,10 @@ def clean_markdown_code(raw_text):
     
     lines = raw_text.strip().splitlines()
     
-    # If it starts with a markdown codeblock, remove the first and last lines
+    # If it starts with a markdown codeblock, remove the first line
     if lines and lines[0].startswith("```"):
         lines = lines[1:]
+        # If it ends with a markdown codeblock, remove the last line
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
             
@@ -27,7 +28,7 @@ def apply_patch_or_replace(repo_path, file_path, new_code):
     full_path = os.path.join(repo_path, file_path)
     cleaned_code = clean_markdown_code(new_code)
     
-    if not cleaned_code:
+    if not cleaned_code.strip():
         print("[ERROR] LLM provided empty code block.")
         return False
 
@@ -83,6 +84,7 @@ def main():
         print("[ERROR] Could not get diff data. Exiting.")
         sys.exit(1)
         
+    # The agent looks for the compiler output here to diagnose the actual problem
     log_path = os.path.join(args.repo_path, "build.log")
     error_logs = get_build_logs(log_path)
     
