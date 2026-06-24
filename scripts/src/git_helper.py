@@ -8,8 +8,8 @@ def get_latest_diff(repo_path):
         diff_cmd = ["git", "diff", "HEAD~15", "HEAD"]
         diff_output = subprocess.check_output(diff_cmd, text=True, errors='replace')
         
-        # --- FIX: Hard cap the diff payload to ~5,000 tokens ---
-        MAX_DIFF_CHARS = 20000
+        # --- FIX: Tighter cap for dense C++/Java code (~4,000 tokens) ---
+        MAX_DIFF_CHARS = 12000
         if len(diff_output) > MAX_DIFF_CHARS:
             diff_output = diff_output[:MAX_DIFF_CHARS] + "\n...[DIFF TRUNCATED DUE TO SIZE]..."
         
