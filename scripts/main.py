@@ -60,7 +60,6 @@ def main():
             print(f"[ERROR] LLM Query Failed: {e}")
             continue
         
-        # Output the LLM's chain of thought to the GitHub Actions Console
         print("\n--- [DIAGNOSIS] ---")
         print(f"Root Cause Analysis:\n{analysis_result.get('root_cause_analysis', 'N/A')}")
         print("Reasoning Steps:")
@@ -76,19 +75,18 @@ def main():
             print("[FAILURE] LLM did not provide a valid patch plan.")
             continue
 
-        # Clean the markdown code and print it directly to the console
         cleaned_code = clean_markdown_code(suggested_fix)
         
         print(f"\n[SUCCESS] AI proposed a logical fix for: {file_path}")
         print("======================================================================")
-        print(f"vvv FULL REPLACEMENT FILE FOR: {file_path} vvv")
+        print(f"vvv PROPOSED CODE MODIFICATION vvv")
         print("======================================================================")
         print(cleaned_code)
         print("======================================================================")
-        print(f"^^^ END OF FILE: {file_path} ^^^")
+        print(f"^^^ END OF MODIFICATION ^^^")
         print("======================================================================\n")
         
-        print("[INFO] Analysis complete. Review the output above and copy the file contents to apply the changes locally.")
+        print("[INFO] Analysis complete. Review the instructions above to manually apply the fix.")
         sys.exit(0)
             
     print(" Max retries reached. Unable to resolve the logic failure.")
