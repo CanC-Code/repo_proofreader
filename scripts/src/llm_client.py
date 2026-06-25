@@ -12,13 +12,19 @@ client = OpenAI(
     base_url=os.getenv("LLM_ENDPOINT", "https://api.openai.com/v1")
 )
 
+# Model name is configurable via env so the workflow controls it, not the script.
+MODEL_NAME = os.getenv("LLM_MODEL", "qwen2.5-coder-7b-instruct")
+
+# Safe context budget: 32768 token window - 4096 completion - ~1000 overhead = 27672
+# At ~4 chars/token that is roughly 110,000 chars. We stay well under in context_retriever.
+MAX_COMPLETION_TOKENS = 4096
+
 def query_reasoning_engine(diff_data, context_map, issue_description):
     with open('.proofreader-engine/templates/error_reasoning.txt', 'r') as f:
         system_prompt_template = f.read()
 
-    # Strip the unfilled placeholder tokens from the template so the LLM
-    # receives a clean directive-only system prompt. The actual data is
-    # injected via the user message below, which is where the model reads it.
+    # Strip unfilled placeholder tokens so the model receives a clean directive-only
+    # system prompt. All data arrives via the user message below.
     system_prompt = (
         system_prompt_template
         .replace("{{pr_diff}}", "")
@@ -38,20 +44,19 @@ def query_reasoning_engine(diff_data, context_map, issue_description):
         {"role": "user", "content": user_content}
     ]
 
-    # Determine whether we are hitting the local llama-cpp server or a real
-    # OpenAI-compatible endpoint. llama-cpp-python's server has partial support
-    # for response_format; we only enable it when we can guarantee the endpoint
-    # will honour it (i.e. when a real OPENAI_API_KEY is present).
+    # Only enable json_object mode when hitting a real OpenAI endpoint.
+    # llama-cpp-python's server has unreliable support for this flag.
     use_json_mode = bool(os.getenv("OPENAI_API_KEY"))
 
     try:
-        print("[DEBUG] Dispatching static analysis payload to LLM endpoint...")
+        print(f"[DEBUG] Dispatching to model: {MODEL_NAME}")
+        print(f"[DEBUG] Payload size: {sum(len(m['content']) for m in messages)} chars")
 
         create_kwargs = dict(
-            model="qwen2.5-coder-3b-instruct",
+            model=MODEL_NAME,
             messages=messages,
-            temperature=0.1,   # Low temperature for deterministic code output
-            max_tokens=4096,
+            temperature=0.1,
+            max_tokens=MAX_COMPLETION_TOKENS,
         )
         if use_json_mode:
             create_kwargs["response_format"] = {"type": "json_object"}
@@ -59,12 +64,11 @@ def query_reasoning_engine(diff_data, context_map, issue_description):
         response = client.chat.completions.create(**create_kwargs)
         raw_content = response.choices[0].message.content
 
-        # Strip markdown fences that a non-compliant model might emit
+        # Strip markdown fences that a non-compliant model may emit
         clean = raw_content.strip()
         if clean.startswith("```"):
-            clean = clean.split("```", 2)[-1]          # drop opening fence
-            clean = clean.rsplit("```", 1)[0].strip()  # drop closing fence
-        # Strip a leading language tag e.g. "json\n{"
+            clean = clean.split("```", 2)[-1]
+            clean = clean.rsplit("```", 1)[0].strip()
         if clean.lower().startswith("json"):
             clean = clean[4:].lstrip()
 
