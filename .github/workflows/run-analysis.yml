@@ -12,40 +12,67 @@ on:
 
 jobs:
   run-diagnostic:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: 📥 Checkout Target Repository
+      - name: ­ЪЊЦ Checkout Target Repository
         uses: actions/checkout@v4
         with:
           path: .
-          fetch-depth: 0  
+          fetch-depth: 0
 
-      - name: 🧠 Checkout Proofreader Engine
+      - name: ­ЪДа Checkout Proofreader Engine
         uses: actions/checkout@v4
         with:
           repository: CanC-Code/repo_proofreader
           path: .proofreader-engine
 
-      - name: 🐍 Set up Python
+      - name: ­ЪљЇ Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 📦 Install Requirements
+      - name: ­ЪЊд Install Requirements
         run: |
           pip install -r .proofreader-engine/scripts/requirements.txt
+          # CPU-only wheel Рђћ no CUDA dependency, fits in runner RAM budget
           pip install llama-cpp-python[server] --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
-      - name: 🤖 Initialize Local LLM Server
+      - name: ­Ъцќ Download Model
         run: |
-          wget -q https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf -O model.gguf
-          # --- FIX: Expanded context window to 16384 tokens ---
-          python3 -m llama_cpp.server --model model.gguf --port 8000 --host 0.0.0.0 --n_ctx 16384 &
-          sleep 15
+          # Qwen2.5-Coder-7B-Instruct Q4_K_M
+          # Context: 32,768 tokens | RAM: ~5.5 GB | Fits in ubuntu-24.04 runner (7 GB)
+          wget -q \
+            https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf \
+            -O model.gguf
+          echo "[INFO] Model download complete: $(du -h model.gguf | cut -f1)"
 
-      - name: 🚀 Run Diagnostic Agent
+      - name: ­Ъџђ Initialize Local LLM Server
+        run: |
+          # n_ctx=32768 matches the model's full context window.
+          # n_threads=2 matches the runner's vCPU count.
+          # n_batch=512 is safe for CPU inference at this context size.
+          python3 -m llama_cpp.server \
+            --model model.gguf \
+            --port 8000 \
+            --host 0.0.0.0 \
+            --n_ctx 32768 \
+            --n_threads 2 \
+            --n_batch 512 &
+          # 7B takes longer to load than 3B Рђћ poll instead of fixed sleep
+          echo "[INFO] Waiting for LLM server startup..."
+          for i in $(seq 1 12); do
+            sleep 5
+            if curl -sf http://localhost:8000/v1/models > /dev/null 2>&1; then
+              echo "[INFO] LLM server is ready."
+              break
+            fi
+            echo "[INFO] Still waiting... (${i}/12)"
+          done
+
+      - name: ­ЪћЇ Run Diagnostic Agent
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LLM_ENDPOINT: "http://localhost:8000/v1"
+          LLM_MODEL: "qwen2.5-coder-7b-instruct"
         run: |
           python3 .proofreader-engine/scripts/main.py --repo_path .
