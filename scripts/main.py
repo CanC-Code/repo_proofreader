@@ -11,7 +11,7 @@ def clean_markdown_code(raw_text):
     if not raw_text:
         return ""
     
-    # --- FIX: Type safety check. If the LLM returned a JSON object/dict instead of a string, format it safely. ---
+    # Type safety check to ensure it formats properly if the LLM returns an object
     if isinstance(raw_text, (dict, list)):
         raw_text = json.dumps(raw_text, indent=2)
     elif not isinstance(raw_text, str):
@@ -38,7 +38,6 @@ def main():
         print("[ERROR] Could not get diff data. Exiting.")
         sys.exit(1)
         
-    # Inject the specific context of the logical failure
     runtime_issue_description = (
         "The APK compiles successfully without errors. However, at runtime, the application "
         "fails to launch and halts completely before the initial N64 logo and intro sequence are rendered. "
@@ -81,19 +80,18 @@ def main():
             print("[FAILURE] LLM did not provide a valid patch plan.")
             continue
 
-        # Safely clean and print the code, handling both strings and dicts
         cleaned_code = clean_markdown_code(suggested_fix)
         
         print(f"\n[SUCCESS] AI proposed a logical fix for: {file_path}")
         print("======================================================================")
-        print(f"vvv PROPOSED CODE MODIFICATION vvv")
+        print(f"vvv FULL REPLACEMENT FILE FOR: {file_path} vvv")
         print("======================================================================")
         print(cleaned_code)
         print("======================================================================")
-        print(f"^^^ END OF MODIFICATION ^^^")
+        print(f"^^^ END OF FILE: {file_path} ^^^")
         print("======================================================================\n")
         
-        print("[INFO] Analysis complete. Review the instructions above to manually apply the fix.")
+        print("[INFO] Analysis complete. Review the full file output above and replace your local file.")
         sys.exit(0)
             
     print(" Max retries reached. Unable to resolve the logic failure.")
