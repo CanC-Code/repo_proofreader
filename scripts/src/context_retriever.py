@@ -36,11 +36,18 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
         for f in diff_data['modified_files']:
             priority_files.add(f)
 
-    # Keywords focused on threading, UI, and extraction
-    search_keywords = ["Thread", "Coroutine", "JNIEXPORT", "native", "onCreate", "Surface", "Extraction", "ROM", "MainActivity", "NativeBridge"]
+    # Core files that MUST be analyzed for UI hangs and JNI deadlocks
+    critical_filenames = {
+        "mainactivity.java", "mainactivity.kt", 
+        "glrenderer.java", "glrenderer.kt",
+        "nativebridge.cpp", "nativebridge.c", 
+        "resource_mgr.cpp", "otrservice.java", "otrservice.kt"
+    }
+
+    search_keywords = ["Thread", "Coroutine", "JNIEXPORT", "native", "onCreate", "Surface", "Extraction", "ROM", "MainActivity", "NativeBridge", "GLRenderer"]
 
     repo_files_scored = []
-    print("[INFO] Scanning for Android-specific logic...")
+    print("[INFO] Scanning for Android-specific logic (Case-Insensitive)...")
     
     for root, dirs, files in os.walk(repo_path):
         if any(part.startswith('.') for part in root.split(os.sep)) or 'build' in root:
@@ -50,21 +57,22 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
             ext = os.path.splitext(file)[1].lower()
             if ext in allowed_extensions:
                 full_path = os.path.join(root, file)
-                rel_path = os.path.relpath(full_path, repo_path)
+                rel_path = os.path.relpath(full_path, repo_path).replace('\\', '/')
                 
                 if rel_path in priority_files:
                     continue 
                     
                 score = 0
+                file_lower = file.lower()
+                rel_path_lower = rel_path.lower()
                 
-                # --- ENHANCED PRIORITIZATION ---
-                # 1. Heavily boost anything in the Android/ directory
-                if "Android/" in rel_path:
+                # 1. GUARANTEED INCLUSION FOR CRITICAL FILES
+                if file_lower in critical_filenames:
+                    score += 1000
+                
+                # 2. Boost anything in an android/ folder (Case-Insensitive)
+                if "android/" in rel_path_lower:
                     score += 100
-                
-                # 2. Boost core lifecycle and JNI bridge files
-                if "MainActivity" in file or "NativeBridge" in file or "Extractor" in file:
-                    score += 75
                     
                 # 3. Boost based on logic keywords
                 try:
@@ -79,10 +87,9 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
                 except Exception:
                     pass
 
-    # Sort: Android files now float to the top automatically
+    # Sort so the score=1000 critical files are always first
     repo_files_scored.sort(key=lambda x: x[0], reverse=True)
 
-    # 4. Process files
     final_files_to_process = []
     for pf in priority_files:
         full_path = os.path.join(repo_path, pf)
@@ -102,8 +109,10 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
         if len(content) > MAX_FILE_CHARS:
             content = content[:MAX_FILE_CHARS] + "\n...[TRUNCATED]..."
             
-        context_map[rel_path] = content
-        total_chars_appended += len(content)
-        print(f"[DEBUG] Priority Appended: {rel_path} (Score: {score if 'score' in locals() else 'N/A'})")
+        # Avoid duplicate appending
+        if rel_path not in context_map:
+            context_map[rel_path] = content
+            total_chars_appended += len(content)
+            print(f"[DEBUG] Priority Appended: {rel_path} (Score: {score if 'score' in locals() else 'N/A'})")
 
     return context_map
