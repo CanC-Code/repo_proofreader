@@ -1,5 +1,4 @@
 import os
-import re
 from tree_sitter import Language, Parser
 import tree_sitter_cpp
 import tree_sitter_java
@@ -32,20 +31,18 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
     MAX_FILE_CHARS = 6000
     total_chars_appended = 0
 
-    # 1. Prioritize files from the recent git commit
     priority_files = set()
     if diff_data and 'modified_files' in diff_data:
         for f in diff_data['modified_files']:
             priority_files.add(f)
 
-    # 2. Define global search keywords based on Android UI hangs
+    # Keywords focused on threading, UI, and extraction
     search_keywords = ["Thread", "Coroutine", "JNIEXPORT", "native", "onCreate", "Surface", "Extraction", "ROM", "MainActivity", "NativeBridge"]
 
-    # 3. Walk the entire repository and score files
     repo_files_scored = []
-    print("[INFO] Scanning entire repository for relevant context...")
+    print("[INFO] Scanning for Android-specific logic...")
+    
     for root, dirs, files in os.walk(repo_path):
-        # Skip hidden directories (like .git) and build outputs
         if any(part.startswith('.') for part in root.split(os.sep)) or 'build' in root:
             continue
             
@@ -59,27 +56,33 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
                     continue 
                     
                 score = 0
-                # High priority for main Android lifecycle and JNI bridge files
-                if "MainActivity" in file or "NativeBridge" in file or "JNI" in file:
-                    score += 50
+                
+                # --- ENHANCED PRIORITIZATION ---
+                # 1. Heavily boost anything in the Android/ directory
+                if "Android/" in rel_path:
+                    score += 100
+                
+                # 2. Boost core lifecycle and JNI bridge files
+                if "MainActivity" in file or "NativeBridge" in file or "Extractor" in file:
+                    score += 75
                     
+                # 3. Boost based on logic keywords
                 try:
                     with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
-                        # Score file based on how many relevant logic keywords it contains
                         for kw in search_keywords:
                             if kw in content:
-                                score += 10
+                                score += 15
                         
                         if score > 0:
                             repo_files_scored.append((score, rel_path, content))
                 except Exception:
                     pass
 
-    # Sort the repository files by their relevance score (highest first)
+    # Sort: Android files now float to the top automatically
     repo_files_scored.sort(key=lambda x: x[0], reverse=True)
 
-    # 4. Combine priority diff files with the top-scoring global files
+    # 4. Process files
     final_files_to_process = []
     for pf in priority_files:
         full_path = os.path.join(repo_path, pf)
@@ -92,18 +95,15 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
     for score, rel_path, content in repo_files_scored:
         final_files_to_process.append((rel_path, content))
 
-    # 5. Build the context map safely under the 16k token limit
     for rel_path, content in final_files_to_process:
         if total_chars_appended >= MAX_TOTAL_CHARS:
-            print(f"[DEBUG] Global context map size limit reached ({MAX_TOTAL_CHARS} chars).")
             break
             
         if len(content) > MAX_FILE_CHARS:
-            content = content[:MAX_FILE_CHARS] + "\n...[FILE TRUNCATED DUE TO SIZE]..."
+            content = content[:MAX_FILE_CHARS] + "\n...[TRUNCATED]..."
             
-        parser = get_parser(rel_path)
         context_map[rel_path] = content
         total_chars_appended += len(content)
-        print(f"[DEBUG] Appended {rel_path} to AI memory.")
+        print(f"[DEBUG] Priority Appended: {rel_path} (Score: {score if 'score' in locals() else 'N/A'})")
 
     return context_map
