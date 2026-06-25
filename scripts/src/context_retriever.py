@@ -34,7 +34,7 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
     priority_files = set()
     if diff_data and 'modified_files' in diff_data:
         for f in diff_data['modified_files']:
-            priority_files.add(f)
+            priority_files.add(f.replace('\\', '/'))
 
     # Core files that MUST be analyzed for UI hangs and JNI deadlocks
     critical_filenames = {
@@ -46,10 +46,11 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
 
     search_keywords = ["Thread", "Coroutine", "JNIEXPORT", "native", "onCreate", "Surface", "Extraction", "ROM", "MainActivity", "NativeBridge", "GLRenderer"]
 
-    repo_files_scored = []
-    print("[INFO] Scanning for Android-specific logic (Case-Insensitive)...")
+    all_scored_files = []
+    print("[INFO] Scoring all repository and diff files together (Context Limit Enforcement)...")
     
     for root, dirs, files in os.walk(repo_path):
+        # Skip hidden directories and build outputs
         if any(part.startswith('.') for part in root.split(os.sep)) or 'build' in root:
             continue
             
@@ -59,60 +60,49 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
                 full_path = os.path.join(root, file)
                 rel_path = os.path.relpath(full_path, repo_path).replace('\\', '/')
                 
-                if rel_path in priority_files:
-                    continue 
-                    
                 score = 0
                 file_lower = file.lower()
                 rel_path_lower = rel_path.lower()
                 
-                # 1. GUARANTEED INCLUSION FOR CRITICAL FILES
-                if file_lower in critical_filenames:
-                    score += 1000
+                # 1. Diff files get a baseline boost so recent changes aren't ignored
+                if rel_path in priority_files:
+                    score += 50
                 
-                # 2. Boost anything in an android/ folder (Case-Insensitive)
+                # 2. GUARANTEED INCLUSION: Overpower everything else
+                if file_lower in critical_filenames:
+                    score += 10000 
+                
+                # 3. Boost anything in an android/ folder
                 if "android/" in rel_path_lower:
-                    score += 100
+                    score += 500
                     
-                # 3. Boost based on logic keywords
+                # 4. Boost based on logic keywords
                 try:
                     with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
                         for kw in search_keywords:
                             if kw in content:
-                                score += 15
+                                score += 20
                         
                         if score > 0:
-                            repo_files_scored.append((score, rel_path, content))
+                            all_scored_files.append((score, rel_path, content))
                 except Exception:
                     pass
 
-    # Sort so the score=1000 critical files are always first
-    repo_files_scored.sort(key=lambda x: x[0], reverse=True)
+    # Sort so the 10,000-point critical files are processed first
+    all_scored_files.sort(key=lambda x: x[0], reverse=True)
 
-    final_files_to_process = []
-    for pf in priority_files:
-        full_path = os.path.join(repo_path, pf)
-        try:
-            with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-                final_files_to_process.append((pf, f.read()))
-        except:
-            pass
-            
-    for score, rel_path, content in repo_files_scored:
-        final_files_to_process.append((rel_path, content))
-
-    for rel_path, content in final_files_to_process:
+    for score, rel_path, content in all_scored_files:
         if total_chars_appended >= MAX_TOTAL_CHARS:
             break
             
         if len(content) > MAX_FILE_CHARS:
-            content = content[:MAX_FILE_CHARS] + "\n...[TRUNCATED]..."
+            content = content[:MAX_FILE_CHARS] + "\n...[TRUNCATED DUE TO SIZE LIMIT]..."
             
         # Avoid duplicate appending
         if rel_path not in context_map:
             context_map[rel_path] = content
             total_chars_appended += len(content)
-            print(f"[DEBUG] Priority Appended: {rel_path} (Score: {score if 'score' in locals() else 'N/A'})")
+            print(f"[DEBUG] Appended: {rel_path} (Score: {score})")
 
     return context_map
