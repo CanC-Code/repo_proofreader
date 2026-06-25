@@ -7,23 +7,18 @@ from src.context_retriever import fetch_relevant_files
 from src.llm_client import query_reasoning_engine
 
 def clean_markdown_code(raw_text):
-    """Strips markdown code blocks from LLM output and enforces string typing."""
     if not raw_text:
         return ""
-    
-    # Type safety check to ensure it formats properly if the LLM returns an object
     if isinstance(raw_text, (dict, list)):
         raw_text = json.dumps(raw_text, indent=2)
     elif not isinstance(raw_text, str):
         raw_text = str(raw_text)
     
     lines = raw_text.strip().splitlines()
-    
     if lines and lines[0].startswith("```"):
         lines = lines[1:]
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
-            
     return "\n".join(lines).strip() + "\n"
 
 def main():
@@ -31,26 +26,27 @@ def main():
     parser.add_argument("--repo_path", required=True)
     args = parser.parse_args()
 
-    print(f"--- [INFO] Initializing Static Analysis Proofreader on {args.repo_path} ---")
+    print(f"--- [INFO] Initializing Global Static Analysis Proofreader on {args.repo_path} ---")
     
     diff_data = get_latest_diff(args.repo_path)
     if not diff_data:
         print("[ERROR] Could not get diff data. Exiting.")
         sys.exit(1)
         
+    # FIX: Updated symptom description to target the new Android UI Hang
     runtime_issue_description = (
-        "The APK compiles successfully without errors. However, at runtime, the application "
-        "fails to launch and halts completely before the initial N64 logo and intro sequence are rendered. "
-        "There are no ADB logs available. The project architecture was recently modified to generate the "
-        "OTR (Open-To-Right) assets dynamically at runtime on the Android device, completely removing "
-        "the dependency on loading a pre-built ROM file. Investigate the codebase for logic locks, "
-        "JNI initialization sequence mismatches, Android thread-blocking (ANR) during the OTR "
-        "generation phase, or native setup failures."
+        "The APK compiles and installs successfully. The initial UI launches and the 'Select ROM' "
+        "extraction phase succeeds. However, exactly 2 seconds after the ROM is accepted, the Android "
+        "application crashes with a silent white screen. There are no ADB logs available. Investigate the "
+        "Android Kotlin frontend (e.g., MainActivity) and the C++ JNI bridge for deadlocks. Ensure the "
+        "native C++ game loop is not being executed synchronously on the main Android UI thread, and check "
+        "if the EGL SurfaceView is fully bound before rendering begins."
     )
     
-    print("[INFO] Building contextual code map...")
+    print("[INFO] Building contextual code map via Global Repo Search...")
     try:
-        context_map = fetch_relevant_files(args.repo_path, diff_data)
+        # Pass the issue description to the global search engine
+        context_map = fetch_relevant_files(args.repo_path, diff_data, runtime_issue_description)
     except Exception as e:
         print(f"[ERROR] Failed to build context map: {e}")
         sys.exit(1)
