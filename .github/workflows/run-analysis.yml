@@ -6,43 +6,47 @@ on:
       target_branch:
         required: true
         type: string
+      issue_description:
+        required: false
+        type: string
+        default: "General code quality review: analyze all files for bugs, logic errors, threading issues, null pointer risks, resource leaks, and architectural flaws. Identify the highest-severity problem and provide a complete corrected file."
 
 jobs:
   run-diagnostic:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout Target Repository
+      - name: ­ЪЊЦ Checkout Target Repository
         uses: actions/checkout@v4
         with:
           path: .
-          fetch-depth: 0  
+          fetch-depth: 0
 
-      - name: 🧠 Checkout Proofreader Engine
+      - name: ­ЪДа Checkout Proofreader Engine
         uses: actions/checkout@v4
         with:
           repository: CanC-Code/repo_proofreader
           path: .proofreader-engine
 
-      - name: 🐍 Set up Python
+      - name: ­ЪљЇ Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 📦 Install Requirements
+      - name: ­ЪЊд Install Requirements
         run: |
-          # CRITICAL FIX: PyPI skipped 0.22.0 for the Java bindings. Upgraded to >=0.23.0.
+          # CRITICAL FIX: PyPI skipped 0.22.0 for the Java bindings. Requires >=0.23.0.
           pip install tree-sitter>=0.22.3 tree-sitter-cpp>=0.23.0 tree-sitter-java>=0.23.0 tree-sitter-kotlin>=0.23.0
-          
+
           # Install CPU-optimized llama-cpp-python (No GPU required, completely offline)
           CMAKE_ARGS="-DLLAMA_METAL=off" pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
-      - name: 🤖 Download Local LLM (Qwen2.5 7B Coder)
+      - name: ­Ъцќ Download Local LLM (Qwen2.5 7B Coder)
         run: |
-          # Download the 7B model directly to the workspace root for the Python script to consume natively
           wget -q https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf -O model.gguf
           ls -la model.gguf
 
-      - name: 🚀 Run Native Diagnostic Agent
+      - name: ­Ъџђ Run Native Diagnostic Agent
         run: |
-          # Run the engine cleanly offline, bypassing all external APIs
-          python3 .proofreader-engine/scripts/main.py --repo_path .
+          python3 .proofreader-engine/scripts/main.py \
+            --repo_path . \
+            --issue_description "${{ inputs.issue_description }}"
