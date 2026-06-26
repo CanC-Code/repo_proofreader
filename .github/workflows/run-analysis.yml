@@ -6,73 +6,41 @@ on:
       target_branch:
         required: true
         type: string
-    secrets:
-      OPENAI_API_KEY:
-        required: false
 
 jobs:
   run-diagnostic:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - name: ­ЪЊЦ Checkout Target Repository
+      - name: 📥 Checkout Target Repository
         uses: actions/checkout@v4
         with:
           path: .
-          fetch-depth: 0
+          fetch-depth: 0  
 
-      - name: ­ЪДа Checkout Proofreader Engine
+      - name: 🧠 Checkout Proofreader Engine
         uses: actions/checkout@v4
         with:
           repository: CanC-Code/repo_proofreader
           path: .proofreader-engine
 
-      - name: ­ЪљЇ Set up Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: ­ЪЊд Install Requirements
+      - name: 📦 Install Requirements
         run: |
           pip install -r .proofreader-engine/scripts/requirements.txt
-          # CPU-only wheel Рђћ no CUDA dependency, fits in runner RAM budget
-          pip install llama-cpp-python[server] --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+          # Only install the base library, no server components needed
+          pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
-      - name: ­Ъцќ Download Model
+      - name: 🤖 Download Local LLM
         run: |
-          # Qwen2.5-Coder-7B-Instruct Q4_K_M
-          # Context: 32,768 tokens | RAM: ~5.5 GB | Fits in ubuntu-24.04 runner (7 GB)
-          wget -q \
-            https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf \
-            -O model.gguf
-          echo "[INFO] Model download complete: $(du -h model.gguf | cut -f1)"
+          # Download the 7B model directly to the workspace root for the Python script to consume
+          wget -q https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf -O model.gguf
+          ls -la model.gguf
 
-      - name: ­Ъџђ Initialize Local LLM Server
+      - name: 🚀 Run Native Diagnostic Agent
         run: |
-          # n_ctx=32768 matches the model's full context window.
-          # n_threads=2 matches the runner's vCPU count.
-          # n_batch=512 is safe for CPU inference at this context size.
-          python3 -m llama_cpp.server \
-            --model model.gguf \
-            --port 8000 \
-            --host 0.0.0.0 \
-            --n_ctx 32768 \
-            --n_threads 2 \
-            --n_batch 512 &
-          # 7B takes longer to load than 3B Рђћ poll instead of fixed sleep
-          echo "[INFO] Waiting for LLM server startup..."
-          for i in $(seq 1 12); do
-            sleep 5
-            if curl -sf http://localhost:8000/v1/models > /dev/null 2>&1; then
-              echo "[INFO] LLM server is ready."
-              break
-            fi
-            echo "[INFO] Still waiting... (${i}/12)"
-          done
-
-      - name: ­ЪћЇ Run Diagnostic Agent
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          LLM_ENDPOINT: "http://localhost:8000/v1"
-          LLM_MODEL: "qwen2.5-coder-7b-instruct"
-        run: |
+          # Run the engine cleanly offline
           python3 .proofreader-engine/scripts/main.py --repo_path .
