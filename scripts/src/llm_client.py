@@ -1,20 +1,30 @@
 import os
 import json
-from openai import OpenAI
-
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    api_key = "ollama"
-
-# CRITICAL FIX: Set a massive timeout (or None for infinite) 
-# because 7B models on GitHub Actions CPUs take a long time to generate full files.
-client = OpenAI(
-    api_key=api_key, 
-    base_url=os.getenv("LLM_ENDPOINT", "http://localhost:8000/v1"),
-    timeout=3600.0 # Wait up to 1 hour for the local model to finish
-)
+import sys
+from llama_cpp import Llama
 
 def query_reasoning_engine(diff_data, context_map, issue_description):
+    # Use direct Python bindings instead of OpenAI HTTP client to prevent ALL network timeouts
+    model_path = "model.gguf"
+    
+    if not os.path.exists(model_path):
+        print(f"[CRITICAL] Model file {model_path} not found in workspace!")
+        sys.exit(1)
+
+    print("[INFO] Loading Qwen 7B model locally into RAM... (This may take a moment)")
+    
+    try:
+        # Load model natively in the same Python process
+        llm = Llama(
+            model_path=model_path,
+            n_ctx=16384,
+            n_gpu_layers=0, # Pure CPU execution
+            verbose=False
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed to load Llama model: {e}")
+        sys.exit(1)
+
     with open('.proofreader-engine/templates/error_reasoning.txt', 'r') as f:
         system_prompt = f.read()
 
@@ -29,20 +39,25 @@ def query_reasoning_engine(diff_data, context_map, issue_description):
         {"role": "user", "content": user_content}
     ]
 
+    print("[INFO] Dispatching payload to native Llama instance. Bypassing all network timeouts.")
+    print("[WARNING] GitHub Actions CPU inference for 7B models can take 15-30 minutes. Please wait...")
+
     try:
-        model_name = os.getenv("LLM_MODEL", "qwen2.5-coder-7b-instruct")
-        print(f"[DEBUG] Dispatching payload to {model_name} (this may take 10-20 minutes on CPU)...")
-        response = client.chat.completions.create(
-            model=model_name,
+        response = llm.create_chat_completion(
             messages=messages,
-            response_format={"type": "json_object"} 
+            response_format={"type": "json_object"},
+            max_tokens=4096,
+            temperature=0.1 # Low temperature forces strict logical adherence and prevents language leaks
         )
-        return json.loads(response.choices[0].message.content)
+        
+        result_text = response["choices"][0]["message"]["content"]
+        return json.loads(result_text)
+        
     except Exception as e:
-        print(f"[ERROR] LLM API execution failed: {e}")
+        print(f"[ERROR] Local model generation failed: {e}")
         return {
-            "reasoning_steps": ["LLM processing interrupted."],
-            "root_cause_analysis": f"Connection/Execution Exception: {e}",
+            "reasoning_steps": ["Native inference interrupted."],
+            "root_cause_analysis": f"Execution Exception: {e}",
             "patch_plan": {"file_path": "N/A", "suggested_fix": "N/A"},
             "risk_assessment": "High"
         }
