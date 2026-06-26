@@ -1,5 +1,4 @@
-openai
 tree-sitter>=0.22.3
-tree-sitter-cpp>=0.22.0
-tree-sitter-java>=0.22.0
-tree-sitter-kotlin>=0.22.0
+tree-sitter-cpp>=0.23.0
+tree-sitter-java>=0.23.0
+tree-sitter-kotlin>=0.23.0
