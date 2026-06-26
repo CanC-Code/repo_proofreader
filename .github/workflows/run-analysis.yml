@@ -30,17 +30,17 @@ jobs:
 
       - name: 📦 Install Requirements
         run: |
-          pip install -r .proofreader-engine/scripts/requirements.txt
-          # Only install the base library, no server components needed
-          pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+          pip install tree-sitter==0.22.3 tree-sitter-cpp==0.22.0 tree-sitter-java==0.22.0 tree-sitter-kotlin==0.22.0
+          # Install CPU-optimized llama-cpp-python (No GPU required)
+          CMAKE_ARGS="-DLLAMA_METAL=off" pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
-      - name: 🤖 Download Local LLM
+      - name: 🤖 Download Local LLM (Qwen2.5 7B Coder)
         run: |
-          # Download the 7B model directly to the workspace root for the Python script to consume
+          # Download the 7B model directly to the workspace root for the Python script to consume natively
           wget -q https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf -O model.gguf
           ls -la model.gguf
 
       - name: 🚀 Run Native Diagnostic Agent
         run: |
-          # Run the engine cleanly offline
+          # Run the engine cleanly offline, bypassing all external APIs
           python3 .proofreader-engine/scripts/main.py --repo_path .
