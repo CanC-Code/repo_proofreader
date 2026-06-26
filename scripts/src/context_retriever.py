@@ -27,9 +27,10 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
     context_map = {}
     allowed_extensions = {'.cpp', '.hpp', '.c', '.h', '.java', '.kt', '.xml'}
     
-    # CRITICAL FIX: Synchronized limits to match the 24,576 token window.
-    # ~70,000 chars roughly equates to ~18k-20k tokens, leaving breathing room for the prompt.
-    MAX_TOTAL_CHARS = 70000 
+    # CRITICAL FIX: Lowering character budget to 55000 to guarantee it never exceeds 24k tokens.
+    # 55,000 chars = ~15,000 tokens. This leaves ~9,500 tokens for the system prompt, 
+    # diff data, and the model's output response within the strict 24,576 token window.
+    MAX_TOTAL_CHARS = 55000 
     MAX_FILE_CHARS = 10000
     total_chars_appended = 0
 
@@ -96,7 +97,7 @@ def fetch_relevant_files(repo_path, diff_data, issue_description=""):
             content = content[:MAX_FILE_CHARS] + "\n...[TRUNCATED DUE TO SIZE LIMIT]..."
             
         # Hard stop to prevent a massive file from blowing past the token limit
-        if total_chars_appended + len(content) > MAX_TOTAL_CHARS + 5000:
+        if total_chars_appended + len(content) > MAX_TOTAL_CHARS + 2000:
             continue
             
         if rel_path not in context_map:
