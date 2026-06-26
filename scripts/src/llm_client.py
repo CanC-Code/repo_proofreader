@@ -13,11 +13,12 @@ def query_reasoning_engine(diff_data, context_map, issue_description):
     print("[INFO] Loading Qwen 7B model locally into RAM... (This may take a moment)")
     
     try:
-        # Load model natively in the same Python process. 
-        # n_ctx=16384 ensures the AI can swallow the massive codebase map without truncating.
+        # CRITICAL FIX: Increased n_ctx to 24576 (24k tokens). 
+        # This safely encompasses the 20,633 tokens you need while avoiding 
+        # Out-Of-Memory (OOM) crashes on the 7GB GitHub Actions runner.
         llm = Llama(
             model_path=model_path,
-            n_ctx=16384,
+            n_ctx=24576,
             n_gpu_layers=0, # Pure CPU execution for GitHub Actions compatibility
             verbose=False
         )
