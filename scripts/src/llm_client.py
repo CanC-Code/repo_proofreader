@@ -4,11 +4,10 @@ import sys
 from llama_cpp import Llama
 
 def query_reasoning_engine(diff_data, context_map, issue_description):
-    # Locate the model downloaded by the GitHub Action
     model_path = "model.gguf"
     
     if not os.path.exists(model_path):
-        print(f"[CRITICAL] Model file {model_path} not found in workspace!")
+        print(f"[CRITICAL] Model file {model_path} not found in workspace! The runner failed to download it.")
         sys.exit(1)
 
     print("[INFO] Loading Qwen 7B model locally into RAM... (This may take a moment)")
@@ -44,15 +43,15 @@ def query_reasoning_engine(diff_data, context_map, issue_description):
         {"role": "user", "content": user_content}
     ]
 
-    print("[INFO] Dispatching payload to native Llama instance. Bypassing all network timeouts.")
+    print("[INFO] Dispatching payload to native Llama instance. Bypassing all network requests.")
     print("[WARNING] GitHub Actions CPU inference for 7B models can take 15-30 minutes. Please wait...")
 
     try:
-        # A synchronous, offline call. It will never timeout on a network socket.
+        # Synchronous, offline local call. Zero network latency or timeouts.
         response = llm.create_chat_completion(
             messages=messages,
             response_format={"type": "json_object"},
-            max_tokens=4096, # Huge token allowance for entire file replacements
+            max_tokens=4096, 
             temperature=0.1, # Extremely low temperature strictly prohibits non-English logic hallucinations
             top_p=0.9
         )
