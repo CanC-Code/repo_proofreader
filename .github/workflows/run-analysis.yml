@@ -31,7 +31,7 @@ jobs:
       - name: 📦 Install Requirements
         run: |
           pip install tree-sitter==0.22.3 tree-sitter-cpp==0.22.0 tree-sitter-java==0.22.0 tree-sitter-kotlin==0.22.0
-          # Install CPU-optimized llama-cpp-python (No GPU required)
+          # Install CPU-optimized llama-cpp-python (No GPU required, completely offline)
           CMAKE_ARGS="-DLLAMA_METAL=off" pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
       - name: 🤖 Download Local LLM (Qwen2.5 7B Coder)
