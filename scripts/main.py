@@ -58,16 +58,24 @@ def main():
         print("[ERROR] No source files found in the repository. Aborting.")
         sys.exit(1)
 
+    total_passes = len(all_batches)
     total_files = sum(len(b) for b in all_batches)
-    print(f"[INFO] Repository fully indexed: {total_files} files across {len(all_batches)} analysis pass(es).")
+    print(f"[INFO] Repository fully indexed: {total_files} files across {total_passes} analysis pass(es).")
 
     all_results = []
 
     for pass_num, context_map in enumerate(all_batches, start=1):
-        print(f"\n[INFO] === PASS {pass_num}/{len(all_batches)}: Analyzing {len(context_map)} files ===")
+        print(f"\n[INFO] === PASS {pass_num}/{total_passes}: Analyzing {len(context_map)} files ===")
 
         try:
-            analysis_result = query_reasoning_engine(diff_data, context_map, issue_description)
+            # Inject pass numbers dynamically into the reasoning loop
+            analysis_result = query_reasoning_engine(
+                diff_data=diff_data, 
+                context_map=context_map, 
+                issue_description=issue_description,
+                pass_num=pass_num,
+                total_passes=total_passes
+            )
 
             print(f"\n--- [LLM DIAGNOSTIC RESULT - PASS {pass_num}] ---")
             print(json.dumps(analysis_result, indent=2))
