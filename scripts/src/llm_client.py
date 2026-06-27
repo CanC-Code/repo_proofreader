@@ -12,18 +12,22 @@ def _get_llm():
     if _llm_instance is not None:
         return _llm_instance
 
-    model_path = "model.gguf"
+    # Pull configuration from environment variables, defaulting to GitHub Actions CPU limits
+    model_path = os.environ.get("LLM_MODEL_PATH", "model.gguf")
+    n_gpu_layers = int(os.environ.get("LLM_GPU_LAYERS", "0"))
+    n_ctx = int(os.environ.get("LLM_CTX_SIZE", "24576"))
+
     if not os.path.exists(model_path):
-        print(f"[CRITICAL] Model file '{model_path}' not found in workspace! "
-              f"The runner failed to download it.")
+        print(f"[CRITICAL] Model file '{model_path}' not found! "
+              f"The runner failed to locate or download it.")
         sys.exit(1)
 
     print("[INFO] Loading Qwen 7B model into RAM... (one-time load, reused across all passes)")
     try:
         _llm_instance = Llama(
             model_path=model_path,
-            n_ctx=32768,       # Expanded target capability context window
-            n_gpu_layers=0,    # Default fallback (Overridden dynamically in notebook configurations)
+            n_ctx=n_ctx,
+            n_gpu_layers=n_gpu_layers,
             verbose=False
         )
     except Exception as e:
@@ -84,16 +88,6 @@ def query_reasoning_engine(diff_data, context_map, issue_description, pass_num=1
     """
     Submit one batch of files to the local LLM for static analysis, injecting static 
     cross-referencing context into every evaluation loop to preserve global state coherence.
-
-    Args:
-        diff_data:          Dict with 'diff', 'modified_files', 'commit_history'.
-        context_map:        Dict of {rel_path: file_content} for this batch.
-        issue_description:  Human-readable description of what to look for.
-        pass_num:           Current pass index (1-based), for logging.
-        total_passes:       Total number of passes, for logging.
-
-    Returns:
-        Parsed JSON dict matching the error_reasoning.txt output schema.
     """
     llm = _get_llm()
     system_prompt = _load_system_prompt()
@@ -118,7 +112,7 @@ def query_reasoning_engine(diff_data, context_map, issue_description, pass_num=1
     print(f"[INFO] Dispatching pass {pass_num}/{total_passes} to local Llama instance "
           f"({len(context_map)} files, {len(user_content)} chars).")
     if pass_num == 1:
-        print("[WARNING] Notebook execution infrastructure processing started. Please wait...")
+        print("[WARNING] Hardware configuration detected. Processing started. Please wait...")
 
     try:
         response = llm.create_chat_completion(
