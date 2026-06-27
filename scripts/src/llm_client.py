@@ -22,8 +22,8 @@ def _get_llm():
     try:
         _llm_instance = Llama(
             model_path=model_path,
-            n_ctx=24576,       # 24k token context window
-            n_gpu_layers=0,    # Pure CPU for GitHub Actions compatibility
+            n_ctx=32768,       # Expanded target capability context window
+            n_gpu_layers=0,    # Default fallback (Overridden dynamically in notebook configurations)
             verbose=False
         )
     except Exception as e:
@@ -50,9 +50,40 @@ def _load_system_prompt():
     sys.exit(1)
 
 
+def _get_global_bridge_context():
+    """
+    Returns an unalterable architectural summary baseline representing the
+    Android JNI subsystems. This prevents the LLM from losing tracking state
+    during deep multi-pass batching runs evaluating isolated low-level N64 engine targets.
+    """
+    return (
+        "====================================================================\n"
+        "STATIC ANCHOR SYSTEM CONTEXT: ANDROID JNI BRIDGE SUBSYSTEM ARCHITECTURE\n"
+        "====================================================================\n"
+        "When evaluating context file blocks in this run, cross-reference them against "
+        "the verified Android runtime architecture summary detailed below:\n\n"
+        "1. THREADING SUBSYSTEM MODEL:\n"
+        "   - UI/Main Thread: Handles lifecycle callbacks (onCreate, surfaceLifecycle).\n"
+        "   - Render Thread (GLSurfaceView / GLRenderer): Invokes onDrawFrame continuously. "
+        "Must synchronize with structural mutations via mutual exclusion structures.\n"
+        "   - Native Worker Thread (game_thread_fn): Detached POSIX lifecycle path executing "
+        "BKA_StartEngine loops independently. Must cleanly attach/detach dynamically to JVM via JNIEnv.\n\n"
+        "2. INITIALIZATION ORDER MATRIX:\n"
+        "   - Phase A: JNI_OnLoad initializes global cached reference JavaVM* g_jvm pointer.\n"
+        "   - Phase B: OtrService fires Java_com_bkawrapper_NativeBridge_nativeInit.\n"
+        "   - Phase C: MainActivity triggers Java_com_bkawrapper_NativeBridge_nativeGameBoot, "
+        "allocating gN64_RDRAM blocks and instantiating the standalone game execution loop.\n\n"
+        "3. MEMORY MODEL & TRANSLATION ENGINE:\n"
+        "   - Virtual memory structures execute atomic offsets relative to continuous allocated RDRAM mapping segments.\n"
+        "   - Critical JNI calls mirror input register configurations via synchronous memory swaps inside onDrawFrame loops.\n"
+        "====================================================================\n"
+    )
+
+
 def query_reasoning_engine(diff_data, context_map, issue_description, pass_num=1, total_passes=1):
     """
-    Submit one batch of files to the local LLM for static analysis.
+    Submit one batch of files to the local LLM for static analysis, injecting static 
+    cross-referencing context into every evaluation loop to preserve global state coherence.
 
     Args:
         diff_data:          Dict with 'diff', 'modified_files', 'commit_history'.
@@ -68,13 +99,15 @@ def query_reasoning_engine(diff_data, context_map, issue_description, pass_num=1
     system_prompt = _load_system_prompt()
 
     pass_header = f"[ANALYSIS PASS {pass_num} of {total_passes}]\n" if total_passes > 1 else ""
+    bridge_baseline = _get_global_bridge_context()
 
     user_content = (
         f"{pass_header}"
+        f"{bridge_baseline}\n"
         f"DIFF:\n{diff_data.get('diff', 'None')}\n\n"
         f"COMMIT HISTORY:\n{diff_data.get('commit_history', 'None')}\n\n"
-        f"CONTEXT MAP ({len(context_map)} files):\n{json.dumps(context_map)}\n\n"
-        f"ISSUE DESCRIPTION:\n{issue_description}"
+        f"TARGET LOCAL CONTEXT MAP ({len(context_map)} files inside current payload batch):\n{json.dumps(context_map)}\n\n"
+        f"ISSUE DESCRIPTION / GLOBAL DIRECTIVE:\n{issue_description}"
     )
 
     messages = [
@@ -85,8 +118,7 @@ def query_reasoning_engine(diff_data, context_map, issue_description, pass_num=1
     print(f"[INFO] Dispatching pass {pass_num}/{total_passes} to local Llama instance "
           f"({len(context_map)} files, {len(user_content)} chars).")
     if pass_num == 1:
-        print("[WARNING] GitHub Actions CPU inference for 7B models can take 15-30 minutes per pass. "
-              "Please wait...")
+        print("[WARNING] Notebook execution infrastructure processing started. Please wait...")
 
     try:
         response = llm.create_chat_completion(
