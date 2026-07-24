@@ -158,13 +158,26 @@ MAX_FILE_CHARS = 12000
 
 def get_parser(file_path):
     ext = os.path.splitext(file_path)[1].lower()
+    target_lang = None
     if ext in ('.cpp', '.hpp', '.c', '.h'):
-        return Parser(CPP_LANGUAGE)
+        target_lang = CPP_LANGUAGE
     elif ext == '.java':
-        return Parser(JAVA_LANGUAGE)
+        target_lang = JAVA_LANGUAGE
     elif ext == '.kt' and KOTLIN_SUPPORT:
-        return Parser(KOTLIN_LANGUAGE)
-    return None
+        target_lang = KOTLIN_LANGUAGE
+
+    if not target_lang:
+        return None
+
+    try:
+        return Parser(target_lang)
+    except TypeError:
+        p = Parser()
+        if hasattr(p, 'set_language'):
+            p.set_language(target_lang)
+        else:
+            p.language = target_lang
+        return p
 
 
 def _score_file(rel_path, file_name, content, priority_files):
